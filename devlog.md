@@ -34,8 +34,35 @@ Thought - We can have an agent responsible just for creating the state config fo
 ## Feb 9, 2025 ##
 Fixed all known issues with the GameStateSystem.  All tests pass.  Updated RPS module to use the new config and it gets stuck waiting for player input.  The issue is that we need to execute the first transition in the repeat in order to start the round and make the player active so they can submit input.  Realized the whole active thing is problematic and needs to be reworked so I commented out for now.  That still leaves a problem of the player won't get prompted until the startRound occurs.  I decided to add an ability for a repeate to have an execute that is executed when the repeat is triggered.  Created a test to verify.  The test exposed an issue where repeats that consist of a single transition wil always be triggered before the transition that follows them.  The problem is that if the repeat condition is a simple () => true we can't tell wether the repeat has completed or not.  A solution is to require that repeat always have 2 states.  A better solution is to have a condition that can check for a repeat to be complete.  
 
-## Feb 10, 20025 ##
-Discovered another issue in testing.  We aren't advancing the state every time we should.
+## Feb 10, 2025 ##
+Discovered another issue in testing.  We aren't advancing the state every time we should.  Determined that the issue is caused by using a generator for the transitions provider so the generator was being reentered in a place where it couldn't process the next transition, requiring another tick tio trigger the next transition.  The fix was to change transitions provider to a normal function so we always ran the search over all transitions each tick.  
 
+## Feb 11, 2025 ##
+After fixing the issue with transitions, discovered the nested repeat case is failing because the inner repeat is being being reset continuously after completing the outer repeat completes one iteration.  
 
+## Feb 12, 2025 ##
+Spent some time trying to fix nested repeat, but ultimately was not successful in resolving the issue.  Shifted gears to getting everything delivered, producing documentation to allow AIs to generate game modules.  Produced a video explaining how to pull down, build the code, and run the example.
 
+## Feb 13, 2025 ##
+Forgot that we were using a local bitECS.  In the course of updating the video to show how to use a fresh bitECS, discovered that the latest rc-0-4-0 broke something in the engine.  Have not had time to dig in and determine cause.
+
+## Feb 14, 2025 ##
+During a team discussion, we determined that there is value in having an ability to simulate gameplay using an AI.  The value we see is:
+* Allows us to protoitype the end to end experience of user creating game, remixing game, playing games.
+* Audience building and community engagement.
+* Prototype PAIT concept
+* Might make it easier to get grants
+* Simulated gameplay could be used during game design.  Could become the conversational artifact.
+we decided to do a timeboxed experiment to see if we could get an LLM to be the GameModule implementation for the text-game-engine.
+
+## Feb 16, 2025 ##
+Began working on integrating AI simulation into text-game-engine.  Decided to use an LLM to extract a game state object from the game description.  We'll use the AI response to generate a zod schema that will be used for runtime output parsing.
+
+## Feb 17, 2025 ##
+Continue with AI integration.  Created a function to process the game description and generate a schema that can be used to parse and validate the runtime state.  Initially struggled with getting valid schemas from model so separated into reasoning and formatting steps.  Once the prompts were working, I was able to combine them.  Began work on integrating with GameEngine.
+ 
+ ## Feb 18, 2025 ##
+ Continue with AI Integration with GameEngine.  I realized that I was going to need to replicate alot of the queue processing logic that was in PlayerInputSystem.  I tried to extract that logic and package it in a generator.  I realized as I implemented this, that the current logic did not guarantee that inputs would be processed in order of arrival.  We can't have our ai processing inputs from players out of turn, so we need to correct this.  To do this I created a merging loop that would merge the inputs from all player queues based on time of arrival.  As this got more complex and I ended up with layers of queueing and waiting, I realized that the entire problem is drastically simplified if merge the queues where we push inputs onto them.  Instead of a queue per player, we have a single queue that contains inputs with the player id.  We can do the same for the output queues.  After refactor, I was able to complete the AI module and run a test.  We completed one round.  The AI got duplicate messages, but failed to tell the players to start the next round and pick again.
+
+ ## Feb 19, 2025 ##
+ Fixed the bug with the duplicate messages.  Once that was fixed, testing revealed that the AI has difficulty keeping track of where it is in the game and what it should do next.  Since we aren't providing a conversation history, we have to make sure that the AI knows everything it needs to know and can determine the game state based solely on the input state and the player actions.  The plan I came up with is to have the game processor determine a state machine and provide that to the runtime AI each invocation.  We'll also have the runtime update the current state.  Hopefully that will get better results.
